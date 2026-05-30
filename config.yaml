@@ -1,0 +1,58 @@
+{
+  "news_count": 6,
+  "max_candidates": 40,
+  "max_candidates_per_source": 12,
+  "dedupe_threshold": 0.86,
+  "model": "gemini-2.5-flash",
+  "use_ai": true,
+  "output_dir": "output",
+  "card_size": [1080, 1080],
+  "telegram_album_delay_seconds": 10,
+  "timezone": "Asia/Seoul",
+  "rss_sources": [
+    {
+      "name": "한국경제",
+      "url": "https://www.hankyung.com/feed/economy",
+      "enabled": true
+    },
+    {
+      "name": "매일경제 경제",
+      "url": "https://www.mk.co.kr/rss/30100041/",
+      "enabled": true
+    },
+    {
+      "name": "매일경제 증권",
+      "url": "https://www.mk.co.kr/rss/30000001/",
+      "enabled": true
+    },
+    {
+      "name": "Google News 한국경제",
+      "url": "https://news.google.com/rss/search?q=%EA%B8%88%EB%A6%AC%20%ED%99%98%EC%9C%A8%20%EC%A6%9D%EC%8B%9C%20%EA%B2%BD%EC%A0%9C&hl=ko&gl=KR&ceid=KR:ko",
+      "enabled": false,
+      "note": "Verified XML response, but no recent candidates were returned in current date filter."
+    },
+    {
+      "name": "CNBC Economy",
+      "url": "https://www.cnbc.com/id/20910258/device/rss/rss.html",
+      "enabled": true
+    },
+    {
+      "name": "WSJ Markets",
+      "url": "https://feeds.a.dj.com/rss/RSSMarketsMain.xml",
+      "enabled": false,
+      "note": "Verified XML response, but no recent candidates were returned in current date filter."
+    },
+    {
+      "name": "연합뉴스 경제",
+      "url": "https://www.yonhapnews.co.kr/rss/economy.xml",
+      "enabled": false,
+      "note": "Initial check returned HTML in this environment; enable only after feedparser test passes."
+    },
+    {
+      "name": "Reuters Business",
+      "url": "https://feeds.reuters.com/reuters/businessNews",
+      "enabled": false,
+      "note": "Legacy feed failed DNS resolution; replace with a verified global source."
+    }
+  ]
+}

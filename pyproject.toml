@@ -1,0 +1,14 @@
+[project]
+name = "economic-news-bot"
+version = "0.1.0"
+description = "Telegram daily economic card news automation"
+requires-python = ">=3.11"
+dependencies = [
+  "feedparser>=6.0.11",
+  "google-genai>=1.0.0",
+  "Pillow>=10.0.0",
+  "requests>=2.31.0"
+]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
