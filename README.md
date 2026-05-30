@@ -93,6 +93,8 @@ GitHub 저장소의 Settings > Secrets and variables > Actions에 아래 4개를
 
 워크플로는 발송 전에 테스트를 실행합니다. 테스트 실패 또는 Gemini 실패로 fallback 카드가 생성되는 경우 실제 발송은 중단됩니다.
 
+자세한 GitHub 저장소 생성, Secrets 등록, 공유 방법은 [docs/github_setup.md](docs/github_setup.md)를 참고합니다.
+
 ## 품질 확인
 
 생성 결과는 `output/rank_01`부터 `output/rank_06`까지 저장됩니다. 각 폴더에는 아래 파일이 생성됩니다.
