@@ -1,6 +1,7 @@
 import json
 import os
 import re
+import time
 import urllib.error
 import urllib.request
 from typing import Iterable, List
@@ -14,26 +15,24 @@ def process_articles(candidates: Iterable[ArticleCandidate], config: dict, force
     api_key = os.environ.get("GEMINI_API_KEY")
 
     if api_key and config.get("use_ai", True) and not force_fallback:
-        try:
-            return _process_with_gemini(candidates, config, api_key)[:news_count]
-        except Exception as exc:
-            print("[WARN] Gemini processing failed; fallback editor used. ({})".format(exc))
+        last_error = None
+        attempts = int(config.get("gemini_attempts", 3))
+        for attempt in range(1, attempts + 1):
+            try:
+                return _process_with_gemini(candidates, config, api_key)[:news_count]
+            except Exception as exc:
+                last_error = exc
+                if attempt < attempts:
+                    wait_seconds = 5 * attempt
+                    print("[WARN] Gemini processing attempt {} failed; retrying in {}s. ({})".format(attempt, wait_seconds, exc))
+                    time.sleep(wait_seconds)
+        print("[WARN] Gemini processing failed; fallback editor used. ({})".format(last_error))
 
     return _process_with_fallback(candidates, news_count)
 
 
 def _process_with_gemini(candidates: List[ArticleCandidate], config: dict, api_key: str) -> List[ProcessedNews]:
-    try:
-        from google import genai  # type: ignore
-    except ImportError:
-        return _process_with_gemini_rest(candidates, config, api_key)
-
-    model = config.get("model", "gemini-2.5-flash")
-    prompt = _build_prompt(candidates, int(config.get("news_count", 6)))
-    client = genai.Client(api_key=api_key)
-    response = client.models.generate_content(model=model, contents=prompt)
-    payload = _extract_json(getattr(response, "text", ""))
-    return _validate_payload(payload)
+    return _process_with_gemini_rest(candidates, config, api_key)
 
 
 def _process_with_gemini_rest(candidates: List[ArticleCandidate], config: dict, api_key: str) -> List[ProcessedNews]:
@@ -57,7 +56,7 @@ def _process_with_gemini_rest(candidates: List[ArticleCandidate], config: dict, 
         method="POST",
     )
     try:
-        with urllib.request.urlopen(request, timeout=60) as response:
+        with urllib.request.urlopen(request, timeout=int(config.get("gemini_timeout_seconds", 180))) as response:
             raw = json.loads(response.read().decode("utf-8"))
     except urllib.error.HTTPError as exc:
         body = exc.read().decode("utf-8", errors="replace")
@@ -95,7 +94,7 @@ def _build_prompt(candidates: List[ArticleCandidate], news_count: int) -> str:
         "정부 정책도 '정책 묶음'으로 뭉뚱그리지 말고, 유턴기업 지원, 에너지 가격 정책, 금융 안정 제도처럼 서로 다른 정책은 별도 이슈로 분리한다.\n"
         "관련 출처가 하나뿐이면 sources를 1개만 넣어도 된다. 복수 출처를 만들기 위해 무관한 기사를 붙이지 마라.\n"
         "투자 권유 표현은 금지하고, '영향을 볼 수 있다/확인해야 한다'처럼 조심스럽게 쓴다.\n"
-        "문장은 짧고 쉬워야 한다. 전문 용어가 나오면 괄호로 쉽게 풀어쓴다.\n"
+        "문장은 쉽되 건성으로 짧게 쓰지 말고, 원인·현재 상황·영향을 한 문장 안에 압축해 상세하게 설명한다.\n"
         "말줄임표(…)를 쓰거나 문장을 중간에 끊지 말고, 모든 문장은 완전한 마침표 문장으로 끝낸다.\n"
         "후보 기사에 있는 source와 url은 반드시 그대로 복사하고, sources 배열에는 실제로 참고한 기사만 넣는다.\n"
         "제목만 반복하지 말고 '무슨 일이 있었는지', '왜 중요한지', '독자가 볼 포인트'가 드러나게 쓴다.\n"
@@ -105,9 +104,10 @@ def _build_prompt(candidates: List[ArticleCandidate], news_count: int) -> str:
         "one_sentence: 표지에 들어갈 한 문장 요약, 55자 안팎, 마침표로 끝낸다.\n"
         "source/url: 대표 출처 1개의 source와 url.\n"
         "sources: [{{source, url, title}}] 형식 배열, 1~4개. 후보 기사 값을 그대로 사용한다.\n"
-        "summary: 쉬운 요약 정확히 3문장, 각 문장은 상세하지만 70자 안팎, 줄바꿈은 \\n, 모든 문장은 마침표로 끝낸다.\n"
-        "points: 핵심 포인트 정확히 3개, 각 70자 안팎, 모든 문장은 마침표로 끝낸다.\n"
-        "comment: 투자자 관점 정확히 3문장, 각 70자 안팎, 줄바꿈은 \\n, 특정 매수/매도 권유 금지.\n\n"
+        "summary: 쉬운 요약 정확히 3문장, 각 문장은 95~115자, 줄바꿈은 \\n, 모든 문장은 마침표로 끝낸다.\n"
+        "points: 핵심 포인트 정확히 3개, 각 문장은 95~115자, 모든 문장은 마침표로 끝낸다.\n"
+        "comment: 투자자 관점 정확히 3문장, 각 문장은 95~115자, 줄바꿈은 \\n, 특정 매수/매도 권유 금지.\n"
+        "summary, points, comment의 각 문장은 카드에서 최소 3줄 이상 보일 만큼 상세해야 하며, 단순한 한 줄 요약처럼 쓰지 마라.\n\n"
         "Articles:\n{articles}"
     ).format(count=news_count, articles=json.dumps(compact_articles, ensure_ascii=False))
 
@@ -151,9 +151,9 @@ def _validate_payload(payload) -> List[ProcessedNews]:
             headline=_clean_output_text(str(raw.get("headline") or ""), 34, 1),
             source=primary_source,
             url=primary_url,
-            summary="\n".join(_clean_sentence_list(raw.get("summary"), 3, 150)),
-            points=[_clean_output_text(str(point), 120, 1) for point in points[:3]],
-            comment="\n".join(_clean_sentence_list(raw.get("comment"), 3, 150)),
+            summary="\n".join(_clean_sentence_list(raw.get("summary"), 3, 180)),
+            points=[_clean_output_text(str(point), 160, 1) for point in points[:3]],
+            comment="\n".join(_clean_sentence_list(raw.get("comment"), 3, 180)),
             one_sentence=_clean_output_text(str(raw.get("one_sentence") or ""), 100, 1),
             sources=sources,
         )

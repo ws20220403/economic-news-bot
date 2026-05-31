@@ -5,6 +5,8 @@
   "dedupe_threshold": 0.86,
   "model": "gemini-2.5-flash",
   "use_ai": true,
+  "gemini_attempts": 3,
+  "gemini_timeout_seconds": 180,
   "output_dir": "output",
   "card_size": [1080, 1080],
   "telegram_album_delay_seconds": 10,

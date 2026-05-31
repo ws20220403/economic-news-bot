@@ -202,7 +202,7 @@ def _numbered_paragraphs(draw, paragraphs, x, y, fonts, accent):
     for idx, paragraph in enumerate(paragraphs, start=1):
         number_text = "0{}".format(idx)
         text_x = x + 76
-        rule_right = 900
+        rule_right = text_x + 590
         lines = _wrap_to_width(draw, paragraph, fonts["body"], rule_right - text_x, max_lines=4)
         draw.text((x, y), number_text, fill=accent, font=fonts["h1"])
         _draw_lines(draw, lines, text_x, y + 7, fonts["body"], INK, 37)
