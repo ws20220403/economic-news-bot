@@ -7,6 +7,7 @@ import urllib.request
 from typing import Iterable, List
 
 from .models import ArticleCandidate, ProcessedNews, SourceRef
+from .quality import validate_processed_news
 
 
 def process_articles(candidates: Iterable[ArticleCandidate], config: dict, force_fallback: bool = False) -> List[ProcessedNews]:
@@ -19,7 +20,9 @@ def process_articles(candidates: Iterable[ArticleCandidate], config: dict, force
         attempts = int(config.get("gemini_attempts", 3))
         for attempt in range(1, attempts + 1):
             try:
-                return _process_with_gemini(candidates, config, api_key)[:news_count]
+                items = _process_with_gemini(candidates, config, api_key)[:news_count]
+                validate_processed_news(items, config)
+                return items
             except Exception as exc:
                 last_error = exc
                 if attempt < attempts:
@@ -151,10 +154,10 @@ def _validate_payload(payload) -> List[ProcessedNews]:
             headline=_clean_output_text(str(raw.get("headline") or ""), 34, 1),
             source=primary_source,
             url=primary_url,
-            summary="\n".join(_clean_sentence_list(raw.get("summary"), 3, 180)),
-            points=[_clean_output_text(str(point), 160, 1) for point in points[:3]],
-            comment="\n".join(_clean_sentence_list(raw.get("comment"), 3, 180)),
-            one_sentence=_clean_output_text(str(raw.get("one_sentence") or ""), 100, 1),
+            summary="\n".join(_clean_sentence_list(raw.get("summary"), 3, 140)),
+            points=[_clean_sentence_text(str(point), 140) for point in points[:3]],
+            comment="\n".join(_clean_sentence_list(raw.get("comment"), 3, 140)),
+            one_sentence=_clean_sentence_text(str(raw.get("one_sentence") or ""), 120, min_chars=20),
             sources=sources,
         )
         if not item.sources and item.source and item.url:
@@ -205,11 +208,13 @@ def _clean_sentence_list(value, max_items: int, line_limit: int) -> List[str]:
         candidates = [text]
     cleaned = []
     for sentence in candidates:
-        sentence = _clean_output_text(sentence, line_limit, 1)
+        sentence = _clean_sentence_text(sentence, line_limit)
         if sentence:
-            cleaned.append(_ensure_period(sentence))
+            cleaned.append(sentence)
         if len(cleaned) >= max_items:
             break
+    if len(cleaned) != max_items:
+        raise ValueError("sentence field must contain exactly {} complete sentences.".format(max_items))
     return cleaned
 
 
@@ -221,6 +226,22 @@ def _split_sentences(value: str) -> List[str]:
     if len(parts) == 1:
         parts = re.split(r"(?<=다\.)\s*", value)
     return [part.strip() for part in parts if part.strip()]
+
+
+def _clean_sentence_text(value: str, line_limit: int, min_chars: int = 45) -> str:
+    text = re.sub(r"^\s*(?:[-??]\s+|\d+[.)]\s+)", "", value or "").strip()
+    text = re.sub(r"\s+", " ", text)
+    if not text:
+        raise ValueError("sentence is empty.")
+    if any(marker in text for marker in ("...", "\u2026", "\u22ef")):
+        raise ValueError("sentence appears truncated.")
+    if len(text) < min_chars:
+        raise ValueError("sentence is too short.")
+    if len(text) > line_limit:
+        raise ValueError("sentence is too long.")
+    if text[-1] not in ".!?":
+        raise ValueError("sentence must end with punctuation.")
+    return text
 
 
 def _ensure_period(value: str) -> str:

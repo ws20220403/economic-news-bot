@@ -8,6 +8,7 @@ from .card_builder import build_cards
 from .config import load_config, read_env_file
 from .dispatcher import dispatch_card_sets, notify_admin
 from .models import ArticleCandidate
+from .quality import validate_processed_news
 from .rss_fetcher import fetch_candidates
 
 
@@ -43,6 +44,7 @@ def main() -> int:
         if not args.dry_run and _looks_like_fallback(processed) and not config.get("allow_fallback_publish", False):
             raise RuntimeError("Gemini 처리 실패로 fallback 카드가 생성되어 실제 발송을 중단합니다. --dry-run으로만 확인하거나 Gemini 재시도 후 발송하세요.")
 
+        validate_processed_news(processed, config)
         output_dir.mkdir(parents=True, exist_ok=True)
         (output_dir / "candidates.json").write_text(
             json.dumps([_candidate_to_dict(item) for item in candidates], ensure_ascii=False, indent=2),
