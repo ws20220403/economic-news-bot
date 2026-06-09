@@ -47,6 +47,13 @@ class FallbackTests(unittest.TestCase):
         # Must not raise: the fallback editor produces card-safe text.
         validate_processed_news(processed, {"validate_card_layout": HAS_PIL})
 
+    def test_fallback_handles_ellipsis_title(self):
+        # News titles often end with "…"; the fallback must not produce a
+        # "truncated" sentence that fails the dry-run quality gate.
+        candidates = [ArticleCandidate(title="한달새 30% 폭락, 전쟁 상승분 다 토해낸 '이 원자재'…", url="https://example.com/x", source="매일경제", summary="")]
+        processed = process_articles(candidates, {"news_count": 1, "use_ai": False}, force_fallback=True)
+        validate_processed_news(processed, {"validate_card_layout": HAS_PIL})
+
     def test_publish_guard_detects_fallback(self):
         processed = process_articles(
             [ArticleCandidate(title="금리 뉴스", url="https://example.com", source="A", summary="금리 뉴스입니다.")],

@@ -343,9 +343,12 @@ def _split_in_two(sentence: str) -> Optional[List[str]]:
 def _process_with_fallback(candidates: List[ArticleCandidate], news_count: int) -> List[ProcessedNews]:
     output = []
     for rank, article in enumerate(candidates[:news_count], start=1):
-        base = _clean_ws(article.summary or article.title)
-        headline = _clean_inline(article.title, HEADLINE_MAX_CHARS)
-        topic = _trim_plain(article.title, 26)
+        # News titles often carry a trailing "…"; strip it so the placeholder
+        # text never trips the truncation guard during a dry-run.
+        clean_title = _strip_ellipsis(article.title)
+        base = _strip_ellipsis(article.summary or article.title)
+        headline = _clean_inline(clean_title, HEADLINE_MAX_CHARS)
+        topic = _trim_plain(clean_title, 26)
         summary = [
             "{} 소식으로, 오늘 아침 살펴볼 만한 경제 이슈로 후보 기사에서 추려 정리한 항목입니다.".format(topic),
             "이 카드는 AI 키 없이 만든 점검용 요약이라 세부 수치와 맥락은 원문에서 다시 확인해야 합니다.".format(),
@@ -387,6 +390,13 @@ def _strip_bullet(value: str) -> str:
 
 def _clean_ws(value: str) -> str:
     return re.sub(r"\s+", " ", value or "").strip()
+
+
+def _strip_ellipsis(value: str) -> str:
+    value = value or ""
+    for marker in ELLIPSES:
+        value = value.replace(marker, " ")
+    return _clean_ws(value)
 
 
 def _clean_inline(value: str, limit: int) -> str:
