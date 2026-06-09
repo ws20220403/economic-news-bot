@@ -1,0 +1,14 @@
+# Keep CI-critical scripts LF so the workflow's bash heredoc never breaks on Linux.
+* text=auto
+*.yml text eol=lf
+*.yaml text eol=lf
+*.py text eol=lf
+*.sh text eol=lf
+
+# Treat binary assets as-is.
+*.ttf binary
+*.otf binary
+*.png binary
+*.jpg binary
+*.woff binary
+*.woff2 binary

@@ -11,15 +11,8 @@ def load_config(path: str) -> Dict[str, Any]:
 
     try:
         data = json.loads(text)
-    except json.JSONDecodeError:
-        try:
-            import yaml  # type: ignore
-        except ImportError as exc:
-            raise RuntimeError(
-                "config.yaml is not JSON-compatible and PyYAML is not installed. "
-                "Install requirements.txt or keep config.yaml as JSON-compatible YAML."
-            ) from exc
-        data = yaml.safe_load(text)
+    except json.JSONDecodeError as exc:
+        raise ValueError("Config file {} must be valid JSON: {}".format(config_path, exc)) from exc
 
     if not isinstance(data, dict):
         raise ValueError("Config root must be an object.")

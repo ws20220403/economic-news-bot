@@ -20,7 +20,7 @@ REQUIRED_ENV = (
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Validate runtime setup without printing secrets.")
-    parser.add_argument("--config", default="config.yaml")
+    parser.add_argument("--config", default="config.json")
     parser.add_argument("--env", default=".env")
     parser.add_argument("--skip-gemini", action="store_true")
     args = parser.parse_args()

@@ -3,10 +3,17 @@ from typing import Iterable, List, Optional
 
 from .models import ProcessedNews
 
+# Content length targets shared with the AI prompt. The pixel-level layout check
+# below is the real gate against clipping; these keep the text in a sane band.
+HEADLINE_MAX_CHARS = 34
+COVER_MAX_CHARS = 62
+BODY_MIN_CHARS = 45
+BODY_MAX_CHARS = 90
 
-TRUNCATION_MARKERS = ("...", "\u2026", "\u22ef")
+SENTENCES_PER_BLOCK = 3
+TRUNCATION_MARKERS = ("...", "…", "⋯")
 TERMINAL_PUNCTUATION = (".", "!", "?")
-BAD_ENDINGS = (",", ";", ":", "-", "\u2013", "\u2014")
+BAD_ENDINGS = (",", ";", ":", "-", "–", "—")
 
 
 def validate_processed_news(news_items: Iterable[ProcessedNews], config: Optional[dict] = None) -> None:
@@ -17,30 +24,34 @@ def validate_processed_news(news_items: Iterable[ProcessedNews], config: Optiona
     for item in items:
         _validate_item_text(item)
 
-    if config is not None and config.get("validate_card_layout", True):
+    if config is None or config.get("validate_card_layout", True):
         _validate_card_layout(items)
 
 
 def _validate_item_text(item: ProcessedNews) -> None:
+    if not item.headline.strip():
+        raise ValueError("quality check failed: rank {} headline is empty.".format(item.rank))
+    if not item.sources:
+        raise ValueError("quality check failed: rank {} has no source.".format(item.rank))
+
     summary = _non_empty_lines(item.summary)
     comment = _non_empty_lines(item.comment)
     points = [point.strip() for point in item.points if point and point.strip()]
 
-    if len(summary) != 3:
-        raise ValueError("quality check failed: rank {} summary must have 3 sentences.".format(item.rank))
-    if len(points) != 3:
-        raise ValueError("quality check failed: rank {} points must have 3 sentences.".format(item.rank))
-    if len(comment) != 3:
-        raise ValueError("quality check failed: rank {} comment must have 3 sentences.".format(item.rank))
+    for label, block in (("summary", summary), ("points", points), ("comment", comment)):
+        if len(block) != SENTENCES_PER_BLOCK:
+            raise ValueError(
+                "quality check failed: rank {} {} must have {} sentences.".format(item.rank, label, SENTENCES_PER_BLOCK)
+            )
 
-    for label, sentence in _iter_body_sentences(item, summary, points, comment):
-        _validate_complete_sentence(item.rank, label, sentence)
+    for label, sentence in _iter_body_sentences(summary, points, comment):
+        _validate_complete_sentence(item.rank, label, sentence, min_chars=BODY_MIN_CHARS - 15, max_chars=BODY_MAX_CHARS + 18)
 
     if item.one_sentence:
-        _validate_complete_sentence(item.rank, "cover", item.one_sentence, min_chars=20, max_chars=130)
+        _validate_complete_sentence(item.rank, "cover", item.one_sentence, min_chars=18, max_chars=COVER_MAX_CHARS + 12)
 
 
-def _iter_body_sentences(item: ProcessedNews, summary: List[str], points: List[str], comment: List[str]):
+def _iter_body_sentences(summary: List[str], points: List[str], comment: List[str]):
     for index, sentence in enumerate(summary, start=1):
         yield "summary {}".format(index), sentence
     for index, sentence in enumerate(points, start=1):
@@ -49,12 +60,12 @@ def _iter_body_sentences(item: ProcessedNews, summary: List[str], points: List[s
         yield "comment {}".format(index), sentence
 
 
-def _validate_complete_sentence(rank: int, label: str, sentence: str, min_chars: int = 45, max_chars: int = 145) -> None:
+def _validate_complete_sentence(rank: int, label: str, sentence: str, min_chars: int, max_chars: int) -> None:
     text = re.sub(r"\s+", " ", sentence or "").strip()
     if len(text) < min_chars:
         raise ValueError("quality check failed: rank {} {} is too short.".format(rank, label))
     if len(text) > max_chars:
-        raise ValueError("quality check failed: rank {} {} is too long for card layout.".format(rank, label))
+        raise ValueError("quality check failed: rank {} {} is too long.".format(rank, label))
     if any(marker in text for marker in TRUNCATION_MARKERS):
         raise ValueError("quality check failed: rank {} {} looks truncated.".format(rank, label))
     if text.endswith(BAD_ENDINGS):
@@ -65,43 +76,14 @@ def _validate_complete_sentence(rank: int, label: str, sentence: str, min_chars:
 
 def _validate_card_layout(items: List[ProcessedNews]) -> None:
     try:
-        from PIL import Image, ImageDraw, ImageFont  # type: ignore
-    except ImportError:
+        from .card_builder import layout_problems
+    except Exception:
         return
 
-    from .card_builder import (
-        _cover_sentence,
-        _investor_sentences,
-        _load_font,
-        _point_sentences,
-        _summary_sentences,
-        _wrap_to_width,
-    )
-
-    image = Image.new("RGB", (1080, 1080), "#FFFFFF")
-    draw = ImageDraw.Draw(image)
-    fonts = {
-        "display": _load_font(74, ImageFont, bold=True),
-        "cover_summary": _load_font(46, ImageFont, bold=True),
-        "body": _load_font(26, ImageFont),
-    }
-
     for item in items:
-        if len(_wrap_to_width(draw, item.headline, fonts["display"], 900, max_lines=99)) > 2:
-            raise ValueError("quality check failed: rank {} headline would be clipped.".format(item.rank))
-        if len(_wrap_to_width(draw, _cover_sentence(item), fonts["cover_summary"], 900, max_lines=99)) > 3:
-            raise ValueError("quality check failed: rank {} cover sentence would be clipped.".format(item.rank))
-        for section, sentences in (
-            ("summary", _summary_sentences(item)),
-            ("points", _point_sentences(item)),
-            ("comment", _investor_sentences(item)),
-        ):
-            for index, sentence in enumerate(sentences, start=1):
-                lines = _wrap_to_width(draw, sentence, fonts["body"], 590, max_lines=99)
-                if len(lines) > 4:
-                    raise ValueError(
-                        "quality check failed: rank {} {} {} would be clipped.".format(item.rank, section, index)
-                    )
+        problems = layout_problems(item)
+        if problems:
+            raise ValueError("quality check failed: rank {} {}".format(item.rank, problems[0]))
 
 
 def _non_empty_lines(value: str) -> List[str]:

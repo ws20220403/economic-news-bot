@@ -1,5 +1,6 @@
 import argparse
 import json
+import sys
 from dataclasses import asdict
 from pathlib import Path
 
@@ -13,8 +14,9 @@ from .rss_fetcher import fetch_candidates
 
 
 def main() -> int:
+    _force_utf8_stdout()
     parser = argparse.ArgumentParser(description="Daily economic card news bot")
-    parser.add_argument("--config", default="config.yaml")
+    parser.add_argument("--config", default="config.json")
     parser.add_argument("--env", default=".env")
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--sample", action="store_true", help="Use samples/sample_articles.json instead of live RSS.")
@@ -56,12 +58,22 @@ def main() -> int:
         )
         card_sets = build_cards(processed, config, str(output_dir))
         dispatch_card_sets(card_sets, dry_run=args.dry_run, delay_seconds=float(config.get("telegram_album_delay_seconds", 10)))
-        notify_admin("오늘 발송 준비 완료 - {}건".format(len(card_sets)) if not args.dry_run else "Dry-run 완료 - {}건".format(len(card_sets)))
+        notify_admin("경제야 뭐했니 발송 완료 - {}건".format(len(card_sets)) if not args.dry_run else "Dry-run 완료 - {}건".format(len(card_sets)))
         print("[DONE] Built {} news card sets in {}".format(len(card_sets), output_dir))
         return 0
     except Exception as exc:
         notify_admin("경제야 뭐했니 실행 실패: {}".format(exc))
         raise
+
+
+def _force_utf8_stdout() -> None:
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if reconfigure:
+            try:
+                reconfigure(encoding="utf-8")
+            except Exception:
+                pass
 
 
 def _load_sample(base_dir: Path):
@@ -90,7 +102,7 @@ def _candidate_to_dict(item: ArticleCandidate):
 
 
 def _looks_like_fallback(processed) -> bool:
-    fallback_markers = ("AI 키 없이 만든 dry-run", "자세한 내용은 원문 링크에서 확인이 필요합니다.")
+    fallback_markers = ("AI 키 없이 만든 점검용 요약", "점검용 요약이므로 투자 판단의 근거로")
     for item in processed:
         text = "{}\n{}\n{}".format(item.summary, item.comment, "\n".join(item.points))
         if any(marker in text for marker in fallback_markers):
