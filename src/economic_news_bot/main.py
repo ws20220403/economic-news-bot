@@ -13,6 +13,10 @@ from .quality import validate_processed_news
 from .rss_fetcher import fetch_candidates
 
 
+class _GeminiUnavailable(RuntimeError):
+    """Raised when only fallback cards exist, so publishing is skipped and retried later."""
+
+
 def main() -> int:
     _force_utf8_stdout()
     parser = argparse.ArgumentParser(description="Daily economic card news bot")
@@ -44,7 +48,9 @@ def main() -> int:
         if len(processed) < int(config.get("news_count", 6)):
             print("[WARN] Only {} processed items were produced.".format(len(processed)))
         if not args.dry_run and _looks_like_fallback(processed) and not config.get("allow_fallback_publish", False):
-            raise RuntimeError("Gemini 처리 실패로 fallback 카드가 생성되어 실제 발송을 중단합니다. --dry-run으로만 확인하거나 Gemini 재시도 후 발송하세요.")
+            raise _GeminiUnavailable(
+                "Gemini 처리 실패로 fallback 카드가 생성되어 실제 발송을 중단합니다. 다음 예약 실행이 자동으로 재시도합니다."
+            )
 
         validate_processed_news(processed, config)
         output_dir.mkdir(parents=True, exist_ok=True)
@@ -61,6 +67,10 @@ def main() -> int:
         notify_admin("경제야 뭐했니 발송 완료 - {}건".format(len(card_sets)) if not args.dry_run else "Dry-run 완료 - {}건".format(len(card_sets)))
         print("[DONE] Built {} news card sets in {}".format(len(card_sets), output_dir))
         return 0
+    except _GeminiUnavailable as exc:
+        # Expected, self-healing: a later scheduled tick retries. Don't spam admin.
+        print("[INFO] {}".format(exc))
+        raise
     except Exception as exc:
         notify_admin("경제야 뭐했니 실행 실패: {}".format(exc))
         raise
