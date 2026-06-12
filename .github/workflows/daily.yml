@@ -94,10 +94,10 @@ jobs:
           echo "publish_date=${{ steps.guard.outputs.publish_date }}"
           echo "reason=${{ steps.guard.outputs.reason }}"
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         if: steps.guard.outputs.should_run == 'true'
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         if: steps.guard.outputs.should_run == 'true'
         with:
           python-version: "3.11"
@@ -144,7 +144,7 @@ jobs:
           mkdir -p .publish-state
           echo "${{ steps.guard.outputs.publish_date }}" > ".publish-state/${{ steps.guard.outputs.publish_date }}.txt"
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: steps.guard.outputs.should_run == 'true' && github.event_name == 'schedule'
         with:
           name: daily-published-${{ steps.guard.outputs.publish_date }}
