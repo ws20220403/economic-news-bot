@@ -68,8 +68,10 @@ $env:PYTHONPATH="src"
 
 ## 자동 발송 (GitHub Actions)
 
-`.github/workflows/daily.yml`은 한국시간 **06:40~07:50** 구간에 5분 간격으로 점검 실행되며,
-가장 먼저 가드를 통과한 실행이 그날 한 번만 발송합니다. (GitHub 스케줄러의 지연을 고려해 목표 시각 06:45 부근에 여러 번 시도)
+`.github/workflows/daily.yml`은 한국시간 **06:42~07:51** 사이의 여러 특정 시각에 실행되며(목표 06:45),
+가장 먼저 가드를 통과한 실행이 그날 한 번만 발송합니다. GitHub은 `*/5` 같은 고빈도 크론을 강하게 억제하므로,
+혼잡한 정각(:00)을 피한 소수의 특정 시각으로 등록해 안정성을 높였습니다. 100% 정시성이 필요하면
+외부 스케줄러가 `repository_dispatch`(event_type `daily-publish`)로 트리거하도록 붙일 수 있습니다.
 
 저장소 `Settings > Secrets and variables > Actions`에 아래 4개를 등록해야 합니다.
 

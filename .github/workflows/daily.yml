@@ -1,18 +1,26 @@
 name: Daily Economic News
 
-# GitHub's scheduled runs drift, so we fire a handful of ticks across the
-# 06:40-07:50 KST window (21:40-22:50 UTC) and publish on the first tick that
-# wins the guard. A per-day artifact makes sure we publish only once.
+# GitHub heavily throttles high-frequency crons (a "*/5" schedule was only being
+# honoured a couple of times a day at random hours, so mornings were missed).
+# Instead we register a few specific, well-spaced ticks across the KST morning
+# window and avoid the congested top-of-hour. The first tick that passes the
+# guard publishes; a per-day artifact guarantees a single send.
+#
+# For guaranteed punctuality you can also POST a repository_dispatch
+# (event_type "daily-publish") from any external scheduler; it reuses the same
+# once-per-day guard.
 on:
   schedule:
-    - cron: "40-55/5 21 * * *" # 06:40, 06:45, 06:50, 06:55 KST
-    - cron: "0-50/5 22 * * *"  # 07:00 .. 07:50 KST
+    - cron: "42,48,54 21 * * *" # 06:42, 06:48, 06:54 KST
+    - cron: "6,21,36,51 22 * * *" # 07:06, 07:21, 07:36, 07:51 KST
   workflow_dispatch:
     inputs:
       dry_run:
         description: "Skip Telegram dispatch"
         required: false
         default: "false"
+  repository_dispatch:
+    types: [daily-publish]
 
 permissions:
   actions: write
@@ -48,12 +56,13 @@ jobs:
           should_run = True
           reason = "manual"
 
-          if event_name == "schedule":
-              minute_of_day = now.hour * 60 + now.minute
-              if not (6 * 60 + 40 <= minute_of_day <= 7 * 60 + 50):
-                  should_run = False
-                  reason = "outside_publish_window"
-              else:
+          if event_name in ("schedule", "repository_dispatch"):
+              if event_name == "schedule":
+                  minute_of_day = now.hour * 60 + now.minute
+                  if not (6 * 60 + 40 <= minute_of_day <= 7 * 60 + 55):
+                      should_run = False
+                      reason = "outside_publish_window"
+              if should_run:
                   try:
                       repo = os.environ["GH_REPOSITORY"]
                       token = os.environ["GH_TOKEN"]
@@ -75,7 +84,7 @@ jobs:
                           should_run = False
                           reason = "already_published"
                       else:
-                          reason = "scheduled_publish"
+                          reason = "publish"
                   except Exception as exc:  # fail-closed: skip this tick, retry next
                       should_run = False
                       reason = "guard_check_failed: {}".format(exc)
@@ -138,14 +147,14 @@ jobs:
             python -m economic_news_bot.main
           fi
 
-      - name: Mark scheduled publish success
-        if: steps.guard.outputs.should_run == 'true' && github.event_name == 'schedule'
+      - name: Mark publish success
+        if: steps.guard.outputs.should_run == 'true' && (github.event_name == 'schedule' || github.event_name == 'repository_dispatch')
         run: |
           mkdir -p .publish-state
           echo "${{ steps.guard.outputs.publish_date }}" > ".publish-state/${{ steps.guard.outputs.publish_date }}.txt"
 
       - uses: actions/upload-artifact@v7
-        if: steps.guard.outputs.should_run == 'true' && github.event_name == 'schedule'
+        if: steps.guard.outputs.should_run == 'true' && (github.event_name == 'schedule' || github.event_name == 'repository_dispatch')
         with:
           name: daily-published-${{ steps.guard.outputs.publish_date }}
           path: .publish-state/${{ steps.guard.outputs.publish_date }}.txt
